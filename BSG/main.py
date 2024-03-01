@@ -24,6 +24,12 @@ def pynput_button_press(key, queue_obj):
 	if key == keyboard.Key.f1:
 		print("Putting an F1 into the queue")
 		queue_obj.put("F1")
+	elif key == keyboard.Key.f2:
+		print("Putting an F2 into the queue")
+		queue_obj.put("F2")
+	elif key == keyboard.Key.f4:
+		print("Putting an F4 into the queue")
+		queue_obj.put("F4")
 
 
 class GraphFrame(tk.Frame):
@@ -106,6 +112,7 @@ class InputFrame(tk.Frame):
 
 class OOP:
 	def __init__(self):
+		self.last_sweep_type = 1
 		self.win = tk.Tk()
 		self.bsg = BSG_Selenium()
 		height = self.win.winfo_screenheight()
@@ -135,59 +142,79 @@ class OOP:
 				item = GLOBAL_QUEUE.get()
 				if item == "F1":
 					print("Running sweep")
-					output = self.bsg.run_sweep()
+					output = self.bsg.run_sweep(number_of_variables=1)
 					self.df = pd.DataFrame(output)
-					# self.wb.sheets["A1"].value = pd.DataFrame(np.array(df.values.tolist())[:, :, 0], df.index, df.columns)  # Write only the first item of each tuple into the spreadsheet
-					names_expected = ["Sweep", *self.df.index.tolist()]
-					if names_expected != self.input_region.current_row_names:
-						self.input_region.build_selectors(names_expected)
+					if ["Sweep", * self.df.index.tolist()] != self.input_region.current_row_names:
+						self.input_region.build_selectors(["Sweep", * self.df.index.tolist()])
+					self.last_sweep_type = 1
+				elif item == "F2":
+					print("Running contour sweep")
+					output = self.bsg.run_sweep(number_of_variables=2)
+					self.df = pd.DataFrame(output)
+					self.last_sweep_type = 2
+				elif item == "F4":
+					print(self.df)
 				elif type(item) is tuple:
-					try:
-						# print(f"Receiving tuple from the QUEUE: {item}")
-						self.currently_plotted = item
+					if self.last_sweep_type == 1:
+						try:
+							# print(f"Receiving tuple from the QUEUE: {item}")
+							self.currently_plotted = item
+							x_var, y_var = item  # unpack tuple
+							if self.df is not None:
+								# print(f"Graphing {x_var} vs {y_var}")
+								self.graph.clear_graph()
+								plot_df = self.df.drop("Expectations", axis=1)
+								if x_var in plot_df.index and y_var in plot_df.index:
+									# In these cases we know that we need to use data from two of the rows
+									# print(plot_df.loc[x_var])
+									# print(plot_df.loc[y_var])
+									self.graph.axis.scatter(plot_df.loc[x_var], plot_df.loc[y_var], label=f"{x_var} vs {y_var}")
+								elif x_var == "Sweep":
+									# print(plot_df.loc[y_var])
+									self.graph.axis.scatter(plot_df.columns, plot_df.loc[y_var], label=y_var)
+									self.graph.axis.plot(plot_df.columns, plot_df.loc[y_var])  # Plot a line so we can see trends
+									# Graph expectations
+									# self.graph.axis.plot([min(plot_df.columns), max(plot_df.columns)], [self.df.loc[y_var]["Expectations"], self.df.loc[y_var]["Expectations"]], label=f"{y_var} Expectations")
+								## Apply general formatting regardless of what method was used to plot
+								self.graph.axis.legend()
+								self.graph.axis.set_xlabel(x_var)
+								self.graph.axis.set_ylabel(y_var)
+								self.graph.axis.grid(which='major', alpha=0.85)
+								self.graph.axis.grid(which="minor", alpha=0.3)
+							else:
+								print("self.df is empty. Unable to graph")
+						except Exception as e:
+							print("Exception encountered while graphing")
+							print(e.args)
+					elif self.last_sweep_type == 2: # Plot as a double sweep
 						x_var, y_var = item  # unpack tuple
 						if self.df is not None:
-							print(f"Graphing {x_var} vs {y_var}")
 							self.graph.clear_graph()
-							plot_df = self.df.drop("Expectations", axis=1)
-							if x_var in plot_df.index and y_var in plot_df.index:
-								# In these cases we know that we need to use data from two of the rows
-								print(plot_df.loc[x_var])
-								print(plot_df.loc[y_var])
-								self.graph.axis.scatter(plot_df.loc[x_var], plot_df.loc[y_var], label=f"{x_var} vs {y_var}")
-							elif x_var == "Sweep":
-								print(plot_df.loc[y_var])
-								self.graph.axis.scatter(plot_df.columns, plot_df.loc[y_var], label=y_var)
-								self.graph.axis.plot(plot_df.columns, plot_df.loc[y_var])  # Plot a line so we can see trends
-								self.graph.axis.plot([min(plot_df.columns), max(plot_df.columns)], [self.df.loc[y_var]["Expectations"], self.df.loc[y_var]["Expectations"]], label=f"{y_var} Expectations")
-							## Apply general formatting regardless of what method was used to plot
-							self.graph.axis.legend()
-							self.graph.axis.set_xlabel(x_var)
-							self.graph.axis.set_ylabel(y_var)
-							self.graph.axis.grid(which='major', alpha=0.85)
-							self.graph.axis.grid(which="minor", alpha=0.3)
-						else:
-							print("self.df is empty. Unable to graph")
-					except Exception as e:
-						print("Exception encountered while graphing")
-						print(e.args)
-
-				# self.graph.axis.set_xticks(np.linspace(min_x, max_x, 20))
-				# self.graph.axis.set_yticks(np.linspace(min_y, max_y, 20))
+							plot_df = self.df.drop("Expectations", axis=1).drop(["Earnings Per Share", "Return On Equity", "Credit Rating", "Image Rating", "Net Revenues ", "Net Profit ", "Ending Cash "], axis=0)
+							z_values = plot_df.apply(lambda x: x.apply(pd.Series)[y_var]).values
+							contour_levels = np.linspace(z_values.min(), z_values.max(), 10)
+							cs = self.graph.axis.contourf(plot_df.index, plot_df.columns, z_values.transpose(), levels=contour_levels)
+							self.graph.axis.contour(cs)
+							cs = self.graph.axis.contour(plot_df.index, plot_df.columns, z_values.transpose(), colors='k', levels=contour_levels)
+							self.graph.axis.contour(cs, colors='k', levels=contour_levels)
+							# self.graph.fig.colorbar(cs)
+							self.graph.axis.clabel(cs, colors='k', fmt='%3.2f', inline=False, fontsize=20, rightside_up=True)
+							self.graph.axis.set_xticks(np.linspace(min(plot_df.index), max(plot_df.index), 20))
+							self.graph.axis.set_yticks(np.linspace(min(plot_df.columns), max(plot_df.columns), 20))
 				else:
 					print(f"Receiving unexpected item from the QUEUE: {item}")
 				GLOBAL_QUEUE.task_done()
 			time.sleep(.5)  # Wait half a second, so we don't run this ALL the time
 			self.graph.canvas.draw_idle()
 
-	def on_press(self, key):
-		"""If the user presses F1, we will run a sweep on their focused element and update our dataframe we are plotting"""
-		if key == keyboard.Key.f1:
-			print("Running sweep")
-			output = self.bsg.run_sweep()
-			self.df = pd.DataFrame(output)
-			GLOBAL_QUEUE.put(self.currently_plotted)
-			# self.wb.sheets["A1"].value = pd.DataFrame(np.array(df.values.tolist())[:, :, 0], df.index, df.columns)  # Write only the first item of each tuple into the spreadsheet
+	# def on_press(self, key):
+	# 	"""If the user presses F1, we will run a sweep on their focused element and update our dataframe we are plotting"""
+	# 	if key == keyboard.Key.f1:
+	# 		print("Running sweep")
+	# 		output = self.bsg.run_sweep()
+	# 		self.df = pd.DataFrame(output)
+	# 		GLOBAL_QUEUE.put(self.currently_plotted)
+	# 		# self.wb.sheets["A1"].value = pd.DataFrame(np.array(df.values.tolist())[:, :, 0], df.index, df.columns)  # Write only the first item of each tuple into the spreadsheet
 
 
 if __name__ == "__main__":
