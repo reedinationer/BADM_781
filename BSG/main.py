@@ -27,6 +27,9 @@ def pynput_button_press(key, queue_obj):
 	elif key == keyboard.Key.f2:
 		print("Putting an F2 into the queue")
 		queue_obj.put("F2")
+	elif key == keyboard.Key.f3:
+		print("Putting an F3 into the queue")
+		queue_obj.put("F3")
 	elif key == keyboard.Key.f4:
 		print("Putting an F4 into the queue")
 		queue_obj.put("F4")
@@ -152,6 +155,9 @@ class OOP:
 					output = self.bsg.run_sweep(number_of_variables=2)
 					self.df = pd.DataFrame(output)
 					self.last_sweep_type = 2
+				elif item == "F3":
+					output = self.bsg.optimize_production()
+					print(output)
 				elif item == "F4":
 					print(self.df)
 				elif type(item) is tuple:
@@ -192,15 +198,16 @@ class OOP:
 							self.graph.clear_graph()
 							plot_df = self.df.drop("Expectations", axis=1).drop(["Earnings Per Share", "Return On Equity", "Credit Rating", "Image Rating", "Net Revenues ", "Net Profit ", "Ending Cash "], axis=0)
 							z_values = plot_df.apply(lambda x: x.apply(pd.Series)[y_var]).values
-							contour_levels = np.linspace(z_values.min(), z_values.max(), 10)
-							cs = self.graph.axis.contourf(plot_df.index, plot_df.columns, z_values.transpose(), levels=contour_levels)
-							self.graph.axis.contour(cs)
-							cs = self.graph.axis.contour(plot_df.index, plot_df.columns, z_values.transpose(), colors='k', levels=contour_levels)
-							self.graph.axis.contour(cs, colors='k', levels=contour_levels)
-							# self.graph.fig.colorbar(cs)
-							self.graph.axis.clabel(cs, colors='k', fmt='%3.2f', inline=False, fontsize=20, rightside_up=True)
-							self.graph.axis.set_xticks(np.linspace(min(plot_df.index), max(plot_df.index), 20))
-							self.graph.axis.set_yticks(np.linspace(min(plot_df.columns), max(plot_df.columns), 20))
+							contour_levels = sorted(np.linspace(z_values.min(), z_values.max(), 10))
+							if min(contour_levels) != max(contour_levels):
+								cs = self.graph.axis.contourf(plot_df.index, plot_df.columns, z_values.transpose(), levels=contour_levels)
+								self.graph.axis.contour(cs)
+								cs = self.graph.axis.contour(plot_df.index, plot_df.columns, z_values.transpose(), colors='k', levels=contour_levels)
+								self.graph.axis.contour(cs, colors='k', levels=contour_levels)
+								# self.graph.fig.colorbar(cs)
+								self.graph.axis.clabel(cs, colors='k', fmt='%3.2f', inline=False, fontsize=20, rightside_up=True)
+								self.graph.axis.set_xticks(np.linspace(min(plot_df.index), max(plot_df.index), 20))
+								self.graph.axis.set_yticks(np.linspace(min(plot_df.columns), max(plot_df.columns), 20))
 				else:
 					print(f"Receiving unexpected item from the QUEUE: {item}")
 				GLOBAL_QUEUE.task_done()
@@ -218,6 +225,7 @@ class OOP:
 
 
 if __name__ == "__main__":
+	print("F1 for a 1 dimensional sweep\nF2 for a 2 dimensional sweep\nF3 to optimize production\nF4 to print the current dataframe")
 	p = Process(target=listen_for_input, args=(GLOBAL_QUEUE, ))
 	p.daemon = True
 	p.start()
