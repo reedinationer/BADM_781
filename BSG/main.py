@@ -57,6 +57,8 @@ class GraphFrame(tk.Frame):
 		if y_label:
 			self.axis.set_ylabel(y_label)
 		self.axis.scatter(x_data, y_data)
+		self.axis.grid(visible=True, which="both")
+		self.axis.minorticks_on()
 		self.canvas.draw_idle()
 
 
